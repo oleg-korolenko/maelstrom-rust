@@ -1,0 +1,6 @@
+./maelstrom test -w echo  --bin ../maelstrom-rust/target/debug/maelstrom-rust --nodes n1 --time-limit 10  test -w echo  --bin ../maelstrom-rust/target/debug/maelstrom-rust --nodes n1 --time-limit 10 
+
+
+
+
+--log-stderr./maelstrom
