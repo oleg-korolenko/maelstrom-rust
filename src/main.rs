@@ -17,8 +17,8 @@ struct Message {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct Body {
-    msg_id: Option<usize>,
-    in_reply_to: Option<usize>,
+    msg_id: Option<i64>,
+    in_reply_to: Option<i64>,
 
     #[serde(flatten)]
     body: MessageBodyType,
@@ -42,7 +42,7 @@ enum MessageBodyType {
 }
 
 struct MessageProcessor {
-    id: usize,
+    id: i64,
 }
 impl MessageProcessor {
     fn new() -> Self {
