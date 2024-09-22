@@ -41,6 +41,10 @@ pub mod msg_protocol {
         Echo {
             echo: String,
         },
+        Generate {},
+        GenerateOk {
+            id: i64,
+        },
     }
 
     pub trait Processor {

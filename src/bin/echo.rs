@@ -3,8 +3,8 @@ use anyhow::Ok;
 use anyhow::Result;
 use maelstrom_rust::msg_protocol::*;
 use maelstrom_rust::runner::*;
-pub struct EchoMaelstromNode {
-    pub id: i64,
+struct EchoMaelstromNode {
+    id: i64,
 }
 
 impl EchoMaelstromNode {
