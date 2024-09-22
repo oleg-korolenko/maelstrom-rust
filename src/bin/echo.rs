@@ -3,22 +3,22 @@ use anyhow::Ok;
 use anyhow::Result;
 use maelstrom_rust::msg_protocol::*;
 use maelstrom_rust::runner::*;
-pub struct EchoProcessor {
+pub struct EchoMaelstromNode {
     pub id: i64,
 }
 
-impl EchoProcessor {
+impl EchoMaelstromNode {
     pub fn new(id: i64) -> Self {
         Self { id }
     }
 }
 
-impl Default for EchoProcessor {
+impl Default for EchoMaelstromNode {
     fn default() -> Self {
         Self::new(1)
     }
 }
-impl Processor for EchoProcessor {
+impl Processor for EchoMaelstromNode {
     fn process(&mut self, msg: Message) -> Result<Option<Message>> {
         match msg.body.body {
             MessageBodyType::Init {
@@ -57,18 +57,17 @@ impl Processor for EchoProcessor {
     }
 }
 fn main() -> anyhow::Result<()> {
-    run(&mut EchoProcessor::default())
+    run(&mut EchoMaelstromNode::default())
 }
 
 #[cfg(test)]
 mod tests {
 
-    use maelstrom_rust::msg_protocol::*;
+    use crate::EchoMaelstromNode;
 
-    use crate::EchoProcessor;
+    use maelstrom_rust::msg_protocol::*;
     mod fixtures {
         use super::*;
-
         pub fn init_msg() -> Message {
             Message {
                 src: Some("src".to_string()),
@@ -83,7 +82,6 @@ mod tests {
                 },
             }
         }
-
         pub fn init_ok_msg() -> Message {
             Message {
                 src: Some("dest".to_string()),
@@ -124,7 +122,7 @@ mod tests {
     }
     #[test]
     fn test_msg_processing_init() {
-        let mut processor = EchoProcessor::default();
+        let mut processor = EchoMaelstromNode::default();
         let msg = fixtures::init_msg();
         let reply = processor.process(msg);
         assert_eq!(reply.unwrap(), Some(fixtures::init_ok_msg()));
@@ -132,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_msg_processing_echo() {
-        let mut processor = EchoProcessor::default();
+        let mut processor = EchoMaelstromNode::default();
         let msg = fixtures::echo_msg();
 
         let reply = processor.process(msg);
@@ -142,7 +140,7 @@ mod tests {
     #[test]
 
     fn test_msg_processing_unhandled_msg() {
-        let mut processor: EchoProcessor = EchoProcessor::default();
+        let mut processor: EchoMaelstromNode = EchoMaelstromNode::default();
         let msg = fixtures::echo_ok_msg();
 
         let expected_err_msg = format!("Received unknown message: {:?}", &msg);
@@ -155,10 +153,10 @@ mod tests {
 
     #[test]
     fn test_msg_processor_id_increments_on_every_msg() {
-        let mut processor = EchoProcessor::default();
+        let mut processor = EchoMaelstromNode::default();
 
         fn assert_reply_to_msg(
-            processor: &mut EchoProcessor,
+            processor: &mut EchoMaelstromNode,
             msg: Message,
             expected_reply: Option<Message>,
         ) {

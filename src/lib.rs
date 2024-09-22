@@ -82,52 +82,54 @@ pub mod runner {
     }
 }
 
+pub mod shared_fixtures {
+    use super::msg_protocol::*;
+
+    pub fn init_ok_msg() -> Message {
+        Message {
+            src: Some("dest".to_string()),
+            dest: Some("src".to_string()),
+            body: Body {
+                msg_id: Some(1),
+                in_reply_to: Some(1),
+                body: MessageBodyType::InitOk {},
+            },
+        }
+    }
+    pub fn echo_msg() -> Message {
+        Message {
+            src: Some("src".to_string()),
+            dest: Some("dest".to_string()),
+            body: Body {
+                msg_id: Some(1),
+                in_reply_to: None,
+                body: MessageBodyType::Echo {
+                    echo: "echo".to_string(),
+                },
+            },
+        }
+    }
+}
 #[cfg(test)]
 mod tests {
 
     use serde_json::from_str;
     use serde_json::to_string;
 
-    use super::msg_protocol::*;
-    mod fixtures {
-        use super::*;
+    use crate::shared_fixtures;
 
-        pub fn init_ok_msg() -> Message {
-            Message {
-                src: Some("dest".to_string()),
-                dest: Some("src".to_string()),
-                body: Body {
-                    msg_id: Some(1),
-                    in_reply_to: Some(1),
-                    body: MessageBodyType::InitOk {},
-                },
-            }
-        }
-        pub fn echo_msg() -> Message {
-            Message {
-                src: Some("src".to_string()),
-                dest: Some("dest".to_string()),
-                body: Body {
-                    msg_id: Some(1),
-                    in_reply_to: None,
-                    body: MessageBodyType::Echo {
-                        echo: "echo".to_string(),
-                    },
-                },
-            }
-        }
-    }
+    use super::msg_protocol::*;
 
     #[test]
     fn test_serde_msg_echo() {
-        let msg = fixtures::echo_msg();
+        let msg = shared_fixtures::echo_msg();
         let msg_serialized = to_string(&msg).unwrap();
         let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
         assert_eq!(msg, msg_round_trip);
     }
     #[test]
     fn test_serde_msg_init_ok() {
-        let msg = fixtures::init_ok_msg();
+        let msg = shared_fixtures::init_ok_msg();
         let msg_serialized = to_string(&msg).unwrap();
         let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
         assert_eq!(msg, msg_round_trip);
