@@ -1,53 +1,24 @@
-use std::io::StdoutLock;
-use std::io::Write;
-
 use anyhow::anyhow;
-use anyhow::Context;
-
 use anyhow::Ok;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct Message {
-    src: Option<String>,
-    dest: Option<String>,
-    body: Body,
+use maelstrom_rust::msg_protocol::*;
+use maelstrom_rust::runner::*;
+pub struct EchoProcessor {
+    pub id: i64,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct Body {
-    msg_id: Option<i64>,
-    in_reply_to: Option<i64>,
-
-    #[serde(flatten)]
-    body: MessageBodyType,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-enum MessageBodyType {
-    Init {
-        node_id: String,
-        node_ids: Vec<String>,
-    },
-    InitOk {},
-    EchoOk {
-        echo: String,
-    },
-    Echo {
-        echo: String,
-    },
-}
-
-struct MessageProcessor {
-    id: i64,
-}
-impl MessageProcessor {
-    fn new() -> Self {
-        MessageProcessor { id: 1 }
+impl EchoProcessor {
+    pub fn new(id: i64) -> Self {
+        Self { id }
     }
+}
+
+impl Default for EchoProcessor {
+    fn default() -> Self {
+        Self::new(1)
+    }
+}
+impl Processor for EchoProcessor {
     fn process(&mut self, msg: Message) -> Result<Option<Message>> {
         match msg.body.body {
             MessageBodyType::Init {
@@ -85,45 +56,16 @@ impl MessageProcessor {
         }
     }
 }
-
-fn serialize(maybe_reply: Option<Message>, out: &mut StdoutLock) -> Result<()> {
-    if let Some(reply) = maybe_reply {
-        serde_json::to_writer(&mut *out, &reply).context("Serialize reply message")?;
-        // writing a new line to flush the line writer
-        out.write_all(b"\n")?;
-    }
-    Ok(())
-}
-
 fn main() -> anyhow::Result<()> {
-    let mut processor = MessageProcessor::new();
-    let stdin = std::io::stdin().lock();
-    let deserializer = serde_json::Deserializer::from_reader(stdin);
-    let mut stdout = std::io::stdout().lock();
-    deserializer
-        .into_iter::<Message>()
-        .for_each(|msg| match msg {
-            std::result::Result::Ok(msg) => {
-                let maybe_msg_result = processor.process(msg).context("Error processing message");
-                if let Result::Ok(maybe_msg) = maybe_msg_result {
-                    serialize(maybe_msg, &mut stdout).unwrap();
-                };
-            }
-            Err(e) => {
-                println!("Unknown message : {}", e);
-            }
-        });
-    Ok(())
+    run(&mut EchoProcessor::default())
 }
 
 #[cfg(test)]
 mod tests {
 
-    use super::*;
+    use maelstrom_rust::msg_protocol::*;
 
-    use serde_json::from_str;
-    use serde_json::to_string;
-
+    use crate::EchoProcessor;
     mod fixtures {
         use super::*;
 
@@ -180,25 +122,9 @@ mod tests {
             }
         }
     }
-
-    #[test]
-    fn test_serde_msg_echo() {
-        let msg = fixtures::echo_msg();
-        let msg_serialized = to_string(&msg).unwrap();
-        let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
-        assert_eq!(msg, msg_round_trip);
-    }
-    #[test]
-    fn test_serde_msg_init_ok() {
-        let msg = fixtures::init_ok_msg();
-        let msg_serialized = to_string(&msg).unwrap();
-        let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
-        assert_eq!(msg, msg_round_trip);
-    }
-
     #[test]
     fn test_msg_processing_init() {
-        let mut processor = MessageProcessor::new();
+        let mut processor = EchoProcessor::default();
         let msg = fixtures::init_msg();
         let reply = processor.process(msg);
         assert_eq!(reply.unwrap(), Some(fixtures::init_ok_msg()));
@@ -206,7 +132,7 @@ mod tests {
 
     #[test]
     fn test_msg_processing_echo() {
-        let mut processor = MessageProcessor::new();
+        let mut processor = EchoProcessor::default();
         let msg = fixtures::echo_msg();
 
         let reply = processor.process(msg);
@@ -216,7 +142,7 @@ mod tests {
     #[test]
 
     fn test_msg_processing_unhandled_msg() {
-        let mut processor = MessageProcessor::new();
+        let mut processor: EchoProcessor = EchoProcessor::default();
         let msg = fixtures::echo_ok_msg();
 
         let expected_err_msg = format!("Received unknown message: {:?}", &msg);
@@ -229,10 +155,10 @@ mod tests {
 
     #[test]
     fn test_msg_processor_id_increments_on_every_msg() {
-        let mut processor = MessageProcessor::new();
+        let mut processor = EchoProcessor::default();
 
         fn assert_reply_to_msg(
-            processor: &mut MessageProcessor,
+            processor: &mut EchoProcessor,
             msg: Message,
             expected_reply: Option<Message>,
         ) {
