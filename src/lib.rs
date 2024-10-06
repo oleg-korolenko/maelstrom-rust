@@ -9,54 +9,38 @@ use anyhow::Result;
 pub mod msg_protocol {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
-    use uuid::Uuid;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    pub struct Message {
+    pub struct Message<T> {
         pub src: Option<String>,
         pub dest: Option<String>,
-        pub body: Body,
+        pub body: Body<T>,
     }
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    pub struct Body {
+    pub struct Body<T> {
         pub msg_id: Option<i64>,
         pub in_reply_to: Option<i64>,
 
         #[serde(flatten)]
-        pub body: MessageBodyType,
+        pub body: T,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-    #[serde(tag = "type")]
-    #[serde(rename_all = "snake_case")]
-    pub enum MessageBodyType {
-        Init {
-            node_id: String,
-            node_ids: Vec<String>,
-        },
-        InitOk {},
-        EchoOk {
-            echo: String,
-        },
-        Echo {
-            echo: String,
-        },
-        Generate {},
-        GenerateOk {
-            id: Uuid,
-        },
-    }
-
-    pub trait Processor {
-        fn process(&mut self, msg: Message) -> Result<Option<Message>>;
+    pub trait Processor<MessageType> {
+        fn process(&mut self, msg: Message<MessageType>) -> Result<Option<Message<MessageType>>>;
     }
 }
 pub mod runner {
     use super::*;
     use msg_protocol::*;
 
-    fn serialize(maybe_reply: Option<Message>, out: &mut StdoutLock) -> Result<()> {
+    fn serialize<MessageType>(
+        maybe_reply: Option<Message<MessageType>>,
+        out: &mut StdoutLock,
+    ) -> Result<()>
+    where
+        MessageType: serde::Serialize,
+    {
         if let Some(reply) = maybe_reply {
             serde_json::to_writer(&mut *out, &reply).context("Serialize reply message")?;
             // writing a new line to flush the line writer
@@ -65,12 +49,17 @@ pub mod runner {
         Ok(())
     }
 
-    pub fn run<P: Processor>(processor: &mut P) -> anyhow::Result<()> {
+    pub fn run<MessageType, P>(processor: &mut P) -> anyhow::Result<()>
+    where
+        MessageType: for<'de> serde::Deserialize<'de>,
+        P: Processor<MessageType>,
+        MessageType: serde::Serialize,
+    {
         let stdin = std::io::stdin().lock();
         let deserializer = serde_json::Deserializer::from_reader(stdin);
         let mut stdout = std::io::stdout().lock();
         deserializer
-            .into_iter::<Message>()
+            .into_iter::<Message<MessageType>>()
             .for_each(|msg| match msg {
                 std::result::Result::Ok(msg) => {
                     let maybe_msg_result =
@@ -84,59 +73,5 @@ pub mod runner {
                 }
             });
         Ok(())
-    }
-}
-
-pub mod shared_fixtures {
-    use super::msg_protocol::*;
-
-    pub fn init_ok_msg() -> Message {
-        Message {
-            src: Some("dest".to_string()),
-            dest: Some("src".to_string()),
-            body: Body {
-                msg_id: Some(1),
-                in_reply_to: Some(1),
-                body: MessageBodyType::InitOk {},
-            },
-        }
-    }
-    pub fn echo_msg() -> Message {
-        Message {
-            src: Some("src".to_string()),
-            dest: Some("dest".to_string()),
-            body: Body {
-                msg_id: Some(1),
-                in_reply_to: None,
-                body: MessageBodyType::Echo {
-                    echo: "echo".to_string(),
-                },
-            },
-        }
-    }
-}
-#[cfg(test)]
-mod tests {
-
-    use serde_json::from_str;
-    use serde_json::to_string;
-
-    use crate::shared_fixtures;
-
-    use super::msg_protocol::*;
-
-    #[test]
-    fn test_serde_msg_echo() {
-        let msg = shared_fixtures::echo_msg();
-        let msg_serialized = to_string(&msg).unwrap();
-        let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
-        assert_eq!(msg, msg_round_trip);
-    }
-    #[test]
-    fn test_serde_msg_init_ok() {
-        let msg = shared_fixtures::init_ok_msg();
-        let msg_serialized = to_string(&msg).unwrap();
-        let msg_round_trip = from_str::<Message>(&msg_serialized).unwrap();
-        assert_eq!(msg, msg_round_trip);
     }
 }

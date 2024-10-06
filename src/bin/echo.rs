@@ -3,6 +3,8 @@ use anyhow::Ok;
 use anyhow::Result;
 use maelstrom_rust::msg_protocol::*;
 use maelstrom_rust::runner::*;
+use serde::{Deserialize, Serialize};
+
 struct EchoMaelstromNode {
     id: i64,
 }
@@ -18,10 +20,28 @@ impl Default for EchoMaelstromNode {
         Self::new(1)
     }
 }
-impl Processor for EchoMaelstromNode {
-    fn process(&mut self, msg: Message) -> Result<Option<Message>> {
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum EchoMessage {
+    Init {
+        node_id: String,
+        node_ids: Vec<String>,
+    },
+    InitOk {},
+    EchoOk {
+        echo: String,
+    },
+    Echo {
+        echo: String,
+    },
+}
+
+impl Processor<EchoMessage> for EchoMaelstromNode {
+    fn process(&mut self, msg: Message<EchoMessage>) -> Result<Option<Message<EchoMessage>>> {
         match msg.body.body {
-            MessageBodyType::Init {
+            EchoMessage::Init {
                 node_id: _,
                 node_ids: _,
             } => {
@@ -31,21 +51,21 @@ impl Processor for EchoMaelstromNode {
                     body: Body {
                         msg_id: Some(self.id),
                         in_reply_to: msg.body.msg_id,
-                        body: MessageBodyType::InitOk {},
+                        body: EchoMessage::InitOk {},
                     },
                 }));
                 self.id += 1;
                 reply
             }
 
-            MessageBodyType::Echo { echo } => {
+            EchoMessage::Echo { echo } => {
                 let reply = Message {
                     src: msg.dest,
                     dest: msg.src,
                     body: Body {
                         msg_id: Some(self.id),
                         in_reply_to: msg.body.msg_id,
-                        body: MessageBodyType::EchoOk { echo },
+                        body: EchoMessage::EchoOk { echo },
                     },
                 };
                 self.id += 1;
@@ -64,56 +84,61 @@ fn main() -> anyhow::Result<()> {
 mod tests {
 
     use crate::EchoMaelstromNode;
+    use crate::EchoMessage;
 
     use maelstrom_rust::msg_protocol::*;
+
+    use serde_json::from_str;
+    use serde_json::to_string;
     mod fixtures {
         use super::*;
-        pub fn init_msg() -> Message {
+
+        pub fn init_msg() -> Message<EchoMessage> {
             Message {
                 src: Some("src".to_string()),
                 dest: Some("dest".to_string()),
                 body: Body {
                     msg_id: Some(1),
                     in_reply_to: None,
-                    body: MessageBodyType::Init {
+                    body: EchoMessage::Init {
                         node_id: "mynode1".to_string(),
                         node_ids: vec!["mynode1".to_string()],
                     },
                 },
             }
         }
-        pub fn init_ok_msg() -> Message {
+        pub fn init_ok_msg() -> Message<EchoMessage> {
             Message {
                 src: Some("dest".to_string()),
                 dest: Some("src".to_string()),
                 body: Body {
                     msg_id: Some(1),
                     in_reply_to: Some(1),
-                    body: MessageBodyType::InitOk {},
+                    body: EchoMessage::InitOk {},
                 },
             }
         }
-        pub fn echo_msg() -> Message {
+        pub fn echo_msg() -> Message<EchoMessage> {
             Message {
                 src: Some("src".to_string()),
                 dest: Some("dest".to_string()),
                 body: Body {
                     msg_id: Some(1),
                     in_reply_to: None,
-                    body: MessageBodyType::Echo {
+                    body: EchoMessage::Echo {
                         echo: "echo".to_string(),
                     },
                 },
             }
         }
-        pub fn echo_ok_msg() -> Message {
+        pub fn echo_ok_msg() -> Message<EchoMessage> {
             Message {
                 src: Some("dest".to_string()),
                 dest: Some("src".to_string()),
                 body: Body {
                     msg_id: Some(1),
                     in_reply_to: Some(1),
-                    body: MessageBodyType::EchoOk {
+                    body: EchoMessage::EchoOk {
                         echo: "echo".to_string(),
                     },
                 },
@@ -138,7 +163,6 @@ mod tests {
     }
 
     #[test]
-
     fn test_msg_processing_unhandled_msg() {
         let mut processor: EchoMaelstromNode = EchoMaelstromNode::default();
         let msg = fixtures::echo_ok_msg();
@@ -157,8 +181,8 @@ mod tests {
 
         fn assert_reply_to_msg(
             processor: &mut EchoMaelstromNode,
-            msg: Message,
-            expected_reply: Option<Message>,
+            msg: Message<EchoMessage>,
+            expected_reply: Option<Message<EchoMessage>>,
         ) {
             let maybe_reply = processor.process(msg).unwrap();
             assert_eq!(maybe_reply, expected_reply);
@@ -176,5 +200,19 @@ mod tests {
             expected_reply.body.in_reply_to = Some(x);
             assert_reply_to_msg(&mut processor, msg, Some(expected_reply))
         })
+    }
+    #[test]
+    fn test_serde_msg_echo() {
+        let msg = fixtures::echo_msg();
+        let msg_serialized = to_string(&msg).unwrap();
+        let msg_round_trip = from_str::<Message<EchoMessage>>(&msg_serialized).unwrap();
+        assert_eq!(msg, msg_round_trip);
+    }
+    #[test]
+    fn test_serde_msg_init_ok() {
+        let msg = fixtures::init_ok_msg();
+        let msg_serialized = to_string(&msg).unwrap();
+        let msg_round_trip = from_str::<Message<EchoMessage>>(&msg_serialized).unwrap();
+        assert_eq!(msg, msg_round_trip);
     }
 }
