@@ -9,6 +9,7 @@ use anyhow::Result;
 pub mod msg_protocol {
     use anyhow::Result;
     use serde::{Deserialize, Serialize};
+    use uuid::Uuid;
 
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     pub struct Message {
@@ -43,7 +44,7 @@ pub mod msg_protocol {
         },
         Generate {},
         GenerateOk {
-            id: i64,
+            id: Uuid,
         },
     }
 
