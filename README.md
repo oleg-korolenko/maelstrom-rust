@@ -16,4 +16,14 @@ Run from your maelstrom installation directory
 
 ```sh
 ./maelstrom test -w unique-ids --bin ../maelstrom-rust/target/debug/unique-id --time-limit 30 --rate 1000 --node-count 3 --availability total --nemesis partition --log-stderr
+
+```
+
+### broadcast
+
+#### single-node
+
+```sh
+./maelstrom test -w broadcast --bin ../maelstrom-rust/target/debug/broadcast --node-count 1 --time-limit 20 --rate 10 --availability total --nemesis partition --log-stderr
+
 ```
