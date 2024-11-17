@@ -10,17 +10,30 @@ use std::collections::HashMap;
 struct BroadcastMaelstromNode {
     id: i64,
     messages: Vec<i64>,
+    node_id: Option<String>,
+    // all nodes in the network minus current node
+    node_ids: Vec<String>,
 }
 
 impl BroadcastMaelstromNode {
-    pub fn new(id: i64, messages: Vec<i64>) -> Self {
-        Self { id, messages }
+    pub fn new(
+        id: i64,
+        node_id: Option<String>,
+        messages: Vec<i64>,
+        node_ids: Vec<String>,
+    ) -> Self {
+        Self {
+            id,
+            node_id,
+            messages,
+            node_ids,
+        }
     }
 }
 
 impl Default for BroadcastMaelstromNode {
     fn default() -> Self {
-        Self::new(1, vec![])
+        Self::new(1, None, vec![], vec![])
     }
 }
 
@@ -53,10 +66,7 @@ impl Processor<BroadcastMessage> for BroadcastMaelstromNode {
         msg: Message<BroadcastMessage>,
     ) -> Result<Option<Message<BroadcastMessage>>> {
         match msg.body.body {
-            BroadcastMessage::Init {
-                node_id: _,
-                node_ids: _,
-            } => {
+            BroadcastMessage::Init { node_id, node_ids } => {
                 let reply = Ok(Some(Message {
                     src: msg.dest,
                     dest: msg.src,
@@ -67,6 +77,10 @@ impl Processor<BroadcastMessage> for BroadcastMaelstromNode {
                     },
                 }));
                 self.id += 1;
+                self.node_id = Some(node_id.clone());
+                self.node_ids = node_ids;
+                // we keep only other nodes by removing the current one
+                self.node_ids.retain(|n| n != &node_id);
                 reply
             }
             BroadcastMessage::Broadcast { message } => {
@@ -99,7 +113,7 @@ impl Processor<BroadcastMessage> for BroadcastMaelstromNode {
                 reply
             }
 
-            BroadcastMessage::Topology { topology: _ } => {
+            BroadcastMessage::Topology { topology } => {
                 let reply = Ok(Some(Message {
                     src: msg.dest,
                     dest: msg.src,
@@ -109,7 +123,16 @@ impl Processor<BroadcastMessage> for BroadcastMaelstromNode {
                         body: BroadcastMessage::TopologyOk {},
                     },
                 }));
+
+                // TODO update current node's topology, move it to node
+                if let Some(node) = &self.node_id {
+                    if let Some(node_ids) = topology.get(node) {
+                        self.node_ids = node_ids.clone();
+                    }
+                };
+
                 self.id += 1;
+
                 reply
             }
 
@@ -129,12 +152,13 @@ mod tests {
 
     use maelstrom_rust::msg_protocol::*;
 
+    use maplit::hashmap;
     use serde_json::from_str;
     use serde_json::to_string;
     mod fixtures {
         use super::*;
-        use maplit::hashmap;
-        use std::vec;
+
+        use std::{collections::HashMap, vec};
 
         pub fn init_msg() -> Message<BroadcastMessage> {
             Message {
@@ -144,8 +168,8 @@ mod tests {
                     msg_id: Some(1),
                     in_reply_to: None,
                     body: BroadcastMessage::Init {
-                        node_id: "mynode1".to_string(),
-                        node_ids: vec!["mynode1".to_string()],
+                        node_id: "node1".to_string(),
+                        node_ids: vec!["node1".to_string(), "node2".to_string()],
                     },
                 },
             }
@@ -206,20 +230,21 @@ mod tests {
                 },
             }
         }
-        pub fn topology_msg() -> Message<BroadcastMessage> {
+        pub fn topology_msg(
+            maybe_provided_topo: Option<HashMap<String, Vec<String>>>,
+        ) -> Message<BroadcastMessage> {
+            let topology = maybe_provided_topo.unwrap_or(hashmap! {
+                "node1".to_string() => vec!["node2".to_string(), "node3".to_string()],
+                "node2".to_string() => vec!["node3".to_string()],
+                "node3".to_string() => vec!["node2".to_string()]
+            });
             Message {
                 src: Some("src".to_string()),
                 dest: Some("dest".to_string()),
                 body: Body {
                     msg_id: Some(1),
                     in_reply_to: None,
-                    body: BroadcastMessage::Topology {
-                        topology: hashmap! {
-                            "node1".to_string() => vec!["node2".to_string(), "node3".to_string()],
-                            "node2".to_string() => vec!["node3".to_string()],
-                            "node3".to_string() => vec!["node2".to_string()]
-                        },
-                    },
+                    body: BroadcastMessage::Topology { topology },
                 },
             }
         }
@@ -241,6 +266,8 @@ mod tests {
         let msg = fixtures::init_msg();
         let reply = processor.process(msg);
         assert_eq!(reply.unwrap(), Some(fixtures::init_ok_msg()));
+        assert_eq!(processor.node_id, Some("node1".to_string()));
+        assert_eq!(processor.node_ids, vec!["node2".to_string()]);
     }
 
     #[test]
@@ -252,10 +279,66 @@ mod tests {
         assert_eq!(reply.unwrap(), Some(fixtures::broadcast_ok_msg()));
         assert_eq!(processor.messages, vec![1]);
     }
+
+    #[test]
+    fn test_msg_processing_topology() {
+        let mut processor = BroadcastMaelstromNode::new(
+            1,
+            Some("node1".to_string()),
+            vec![],
+            vec!["node1".to_string()],
+        );
+        let msg = fixtures::topology_msg(None);
+
+        let reply = processor.process(msg);
+        assert_eq!(reply.unwrap(), Some(fixtures::topology_ok_msg()));
+        assert_eq!(processor.node_id, Some("node1".to_string()));
+        assert_eq!(
+            processor.node_ids,
+            vec!["node2".to_string(), "node3".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_msg_processing_topology_without_node_intialized_before() {
+        let mut processor = BroadcastMaelstromNode::default();
+        let msg = fixtures::topology_msg(None);
+
+        let reply = processor.process(msg);
+        assert_eq!(reply.unwrap(), Some(fixtures::topology_ok_msg()));
+        // we shouldn't update with values from the topology message if current node_id hasn't even been initialized
+        assert_eq!(processor.node_id, None);
+        let expected_node_ids: Vec<String> = vec![];
+        assert_eq!(processor.node_ids, expected_node_ids);
+    }
+
+    #[test]
+    fn test_msg_processing_topology_without_current_nodeid_mapped() {
+        let mut processor = BroadcastMaelstromNode::new(
+            1,
+            Some("node1".to_string()),
+            vec![],
+            vec!["node1".to_string()],
+        );
+        let msg = fixtures::topology_msg(Some(hashmap! {
+            "node2".to_string() => vec!["node3".to_string()],
+            "node3".to_string() => vec!["node2".to_string()]
+        }));
+
+        let reply = processor.process(msg);
+        assert_eq!(reply.unwrap(), Some(fixtures::topology_ok_msg()));
+        // we shouldn't update with values from the topology message if current node_id is not mapped
+        assert_eq!(processor.node_id, Some("node1".to_string()));
+        assert_eq!(processor.node_ids, vec!["node1".to_string(),]);
+    }
+
     #[test]
     fn test_msg_processing_read() {
         let stored_messages = vec![1, 2];
-        let mut processor = BroadcastMaelstromNode::new(1, stored_messages.clone());
+        let topology = vec!["2".to_string()];
+
+        let mut processor =
+            BroadcastMaelstromNode::new(1, None, stored_messages.clone(), topology.clone());
         let msg = fixtures::read_msg();
 
         let reply = processor.process(msg);
@@ -325,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_serde_msg_topology() {
-        assert_round_trip(fixtures::topology_msg());
+        assert_round_trip(fixtures::topology_msg(None));
     }
 
     #[test]
