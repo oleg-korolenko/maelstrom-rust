@@ -27,7 +27,10 @@ pub mod msg_protocol {
     }
 
     pub trait Processor<MessageType> {
-        fn process(&mut self, msg: Message<MessageType>) -> Result<Option<Message<MessageType>>>;
+        fn process(
+            &mut self,
+            msg: Message<MessageType>,
+        ) -> Result<Option<Vec<Message<MessageType>>>>;
     }
 }
 pub mod runner {
@@ -35,16 +38,18 @@ pub mod runner {
     use msg_protocol::*;
 
     fn serialize<MessageType>(
-        maybe_reply: Option<Message<MessageType>>,
+        maybe_reply: Option<Vec<Message<MessageType>>>,
         out: &mut StdoutLock,
     ) -> Result<()>
     where
         MessageType: serde::Serialize,
     {
-        if let Some(reply) = maybe_reply {
-            serde_json::to_writer(&mut *out, &reply).context("Serialize reply message")?;
-            // writing a new line to flush the line writer
-            out.write_all(b"\n")?;
+        if let Some(replies) = maybe_reply {
+            for reply in replies {
+                serde_json::to_writer(&mut *out, &reply).context("Serialize reply message")?;
+                // writing a new line to flush the line writer
+                out.write_all(b"\n")?;
+            }
         }
         Ok(())
     }
