@@ -39,13 +39,13 @@ pub enum EchoMessage {
 }
 
 impl Processor<EchoMessage> for EchoMaelstromNode {
-    fn process(&mut self, msg: Message<EchoMessage>) -> Result<Option<Message<EchoMessage>>> {
+    fn process(&mut self, msg: Message<EchoMessage>) -> Result<Option<Vec<Message<EchoMessage>>>> {
         match msg.body.body {
             EchoMessage::Init {
                 node_id: _,
                 node_ids: _,
             } => {
-                let reply = Ok(Some(Message {
+                let reply = Ok(Some(vec![Message {
                     src: msg.dest,
                     dest: msg.src,
                     body: Body {
@@ -53,7 +53,7 @@ impl Processor<EchoMessage> for EchoMaelstromNode {
                         in_reply_to: msg.body.msg_id,
                         body: EchoMessage::InitOk {},
                     },
-                }));
+                }]));
                 self.id += 1;
                 reply
             }
@@ -69,7 +69,7 @@ impl Processor<EchoMessage> for EchoMaelstromNode {
                     },
                 };
                 self.id += 1;
-                Ok(Some(reply))
+                Ok(Some(vec![reply]))
             }
 
             _ => Err(anyhow!("Received unknown message: {:?}", msg)),
@@ -150,7 +150,7 @@ mod tests {
         let mut processor = EchoMaelstromNode::default();
         let msg = fixtures::init_msg();
         let reply = processor.process(msg);
-        assert_eq!(reply.unwrap(), Some(fixtures::init_ok_msg()));
+        assert_eq!(reply.unwrap(), Some(vec![fixtures::init_ok_msg()]));
     }
 
     #[test]
@@ -159,7 +159,7 @@ mod tests {
         let msg = fixtures::echo_msg();
 
         let reply = processor.process(msg);
-        assert_eq!(reply.unwrap(), Some(fixtures::echo_ok_msg()));
+        assert_eq!(reply.unwrap(), Some(vec![fixtures::echo_ok_msg()]));
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod tests {
         fn assert_reply_to_msg(
             processor: &mut EchoMaelstromNode,
             msg: Message<EchoMessage>,
-            expected_reply: Option<Message<EchoMessage>>,
+            expected_reply: Option<Vec<Message<EchoMessage>>>,
         ) {
             let maybe_reply = processor.process(msg).unwrap();
             assert_eq!(maybe_reply, expected_reply);
@@ -198,7 +198,7 @@ mod tests {
             let mut expected_reply = base_reply.clone();
             expected_reply.body.msg_id = Some(x);
             expected_reply.body.in_reply_to = Some(x);
-            assert_reply_to_msg(&mut processor, msg, Some(expected_reply))
+            assert_reply_to_msg(&mut processor, msg, Some(vec![expected_reply]))
         })
     }
     #[test]

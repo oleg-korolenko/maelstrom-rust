@@ -50,14 +50,14 @@ impl Processor<UniqueIdMessage> for UniqueIdGeneratorMaelstromNode {
     fn process(
         &mut self,
         msg: Message<UniqueIdMessage>,
-    ) -> Result<Option<Message<UniqueIdMessage>>> {
+    ) -> Result<Option<Vec<Message<UniqueIdMessage>>>> {
         match msg.body.body {
             UniqueIdMessage::Init {
                 node_id: _,
                 node_ids: _,
             } => {
                 // TODO fix repetition with other nodes
-                let reply = Ok(Some(Message {
+                let reply = Ok(Some(vec![Message {
                     src: msg.dest,
                     dest: msg.src,
                     body: Body {
@@ -65,12 +65,12 @@ impl Processor<UniqueIdMessage> for UniqueIdGeneratorMaelstromNode {
                         in_reply_to: msg.body.msg_id,
                         body: UniqueIdMessage::InitOk {},
                     },
-                }));
+                }]));
                 self.id += 1;
                 reply
             }
             UniqueIdMessage::Generate {} => {
-                let reply = Ok(Some(Message {
+                let reply = Ok(Some(vec![Message {
                     src: msg.dest,
                     dest: msg.src,
                     body: Body {
@@ -80,7 +80,7 @@ impl Processor<UniqueIdMessage> for UniqueIdGeneratorMaelstromNode {
                             id: self.uuid_generator.generate(),
                         },
                     },
-                }));
+                }]));
                 self.id += 1;
                 reply
             }
@@ -179,7 +179,7 @@ mod tests {
         let mut processor = UniqueIdGeneratorMaelstromNode::default();
         let msg = fixtures::init_msg();
         let reply = processor.process(msg);
-        assert_eq!(reply.unwrap(), Some(fixtures::init_ok_msg()));
+        assert_eq!(reply.unwrap(), Some(vec![fixtures::init_ok_msg()]));
     }
 
     #[test]
@@ -210,7 +210,7 @@ mod tests {
 
         let reply = processor.process(msg);
 
-        assert_eq!(reply.unwrap(), Some(fixtures::generate_ok_msg(uuid)));
+        assert_eq!(reply.unwrap(), Some(vec![fixtures::generate_ok_msg(uuid)]));
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
         fn assert_reply_to_msg(
             processor: &mut UniqueIdGeneratorMaelstromNode,
             msg: Message<UniqueIdMessage>,
-            expected_reply: Option<Message<UniqueIdMessage>>,
+            expected_reply: Option<Vec<Message<UniqueIdMessage>>>,
         ) {
             let maybe_reply = processor.process(msg).unwrap();
             assert_eq!(maybe_reply, expected_reply);
@@ -255,7 +255,7 @@ mod tests {
             let mut expected_reply = base_reply.clone();
             expected_reply.body.msg_id = Some(x);
             expected_reply.body.in_reply_to = Some(x);
-            assert_reply_to_msg(&mut processor, msg, Some(expected_reply))
+            assert_reply_to_msg(&mut processor, msg, Some(vec![expected_reply]))
         })
     }
 }
