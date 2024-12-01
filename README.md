@@ -31,6 +31,12 @@ Run from your maelstrom installation directory
 ### multi-node
 
 ```sh  
-./maelstrom test -w broadcast --bin ../maelstrom-rust/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10 --availability total --nemesis partition --log-stderr
+./maelstrom test -w broadcast --bin ../maelstrom-rust/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10 --log-stderr
+
 ```
-./maelstrom test -w broadcast --bin ../maelstrom-rust/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10
+
+### multi-node with network partition
+
+```sh
+./maelstrom test -w broadcast --bin ../maelstrom-rust/target/debug/broadcast --node-count 5 --time-limit 20 --rate 10 --nemesis partition --log-stderr
+```

@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 anyhow = "1.0.93"
-serde = { version = "1.0.214", features = ["derive"] }
-serde_json = "1.0.132"
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
 maplit = "1.0"
